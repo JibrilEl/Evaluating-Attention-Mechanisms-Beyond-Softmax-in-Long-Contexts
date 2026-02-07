@@ -67,6 +67,20 @@ python visualize.py heatmap \
     --output attention_heatmap.png
 ```
 
+
+#### Plot CIFAR-10 Attention Maps
+
+Visualize attention patterns on CIFAR-10 images:
+
+```bash
+python visualize.py cifar10_attention \
+    --checkpoint cifar10_model.pt \
+    --layer 0 \
+    --head 0 \
+    --num_samples 4 \
+    --output cifar10_attention.png
+```
+
 #### Plot Benchmark Results
 
 Generate a plot from benchmark results:
@@ -87,7 +101,7 @@ python visualize.py curves \
     --output training_curves.png
 ```
 
-## Training Arguments
+## Training Arguments language model
 
 | Argument | Description | Default |
 |----------|-------------|---------|
@@ -106,6 +120,26 @@ python visualize.py curves \
 | `--seed` | Random seed | 1337 |
 | `--save_path` | Path to save model | None |
 
+
+### CIFAR-10 Vision Transformer (train_cifar10.py)
+
+| Argument | Description | Default |
+|----------|-------------|---------|
+| `--data_dir` | Directory for CIFAR-10 data | `./data` |
+| `--img_size` | Image size | 32 |
+| `--patch_size` | Patch size for vision transformer | 4 |
+| `--n_embd` | Embedding dimension | 64 |
+| `--n_head` | Number of attention heads | 8 |
+| `--n_layer` | Number of transformer layers | 3 |
+| `--dropout` | Dropout rate | 0.2 |
+| `--head_type` | Attention mechanism (`standard`, `logistic`, `softmax_free`) | `standard` |
+| `--batch_size` | Batch size | 32 |
+| `--max_iters` | Training iterations | 5000 |
+| `--learning_rate` | Learning rate | 3e-4 |
+| `--eval_interval` | Evaluation frequency | 100 |
+| `--eval_iters` | Iterations for evaluation | 200 |
+| `--seed` | Random seed | 1337 |
+| `--save_path` | Path to save model | None |
 
 ## Data
 
