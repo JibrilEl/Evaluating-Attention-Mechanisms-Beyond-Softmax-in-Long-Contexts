@@ -106,26 +106,10 @@ python visualize.py curves \
 | `--seed` | Random seed | 1337 |
 | `--save_path` | Path to save model | None |
 
-## Example Workflow
 
-```bash
-# 1. Train models with different attention mechanisms
-python train.py --data_path input.txt --head_type standard --save_path model_softmax.pt
-python train.py --data_path input.txt --head_type softmax_free --save_path model_sima.pt
+## Data
 
-# 2. Benchmark performance
-python benchmark.py --output benchmark_results.json
-
-# 3. Visualize results
-python visualize.py benchmark --results benchmark_results.json --output benchmark_plot.png
-python visualize.py heatmap --checkpoint model_softmax.pt --data_path input.txt --output heatmap_softmax.png
-python visualize.py heatmap --checkpoint model_sima.pt --data_path input.txt --output heatmap_sima.png
-python visualize.py curves --checkpoint model_softmax.pt --output curves_softmax.png
-```
-
-## Data Format
-
-The training script expects a text file (e.g., `input.txt`) containing the training corpus. The text will be tokenized using the GPT-2 tokenizer.
+The training script expects a text file (e.g., `input.txt`) containing the training corpus. 
 
 You can download the tiny shakespeare dataset here :
 ```bash
