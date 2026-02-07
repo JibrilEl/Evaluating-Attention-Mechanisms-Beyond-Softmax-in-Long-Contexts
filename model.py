@@ -242,3 +242,376 @@ class SmallLanguageModel(nn.Module):
             idx_next = torch.multinomial(probs, num_samples=1)
             idx = torch.cat((idx, idx_next), dim=1)
         return idx
+    
+#VITs -----------------------
+
+class PatchEmbedding(nn.Module):
+    """Convert image into patches and embed them"""
+    
+    def __init__(self, img_size=32, patch_size=4, in_channels=3, n_embd=64):
+        super().__init__()
+        self.img_size = img_size
+        self.patch_size = patch_size
+        self.n_patches = (img_size // patch_size) ** 2
+        
+        self.proj = nn.Conv2d(
+            in_channels=in_channels,
+            out_channels=n_embd,
+            kernel_size=patch_size,
+            stride=patch_size
+        )
+    
+    def forward(self, x):
+        # x: (B, C, H, W)
+        x = self.proj(x)                        # (B, n_embd, H', W')
+        x = x.flatten(2).transpose(1, 2)        # (B, num_patches, n_embd)
+        return x
+
+
+# ============================================
+# ATTENTION HEADS (NO CAUSAL MASKING FOR VISION)
+# ============================================
+
+class VisionHead(nn.Module):
+    """Standard self-attention head without causal masking (for vision)"""
+    
+    def __init__(self, head_size, n_embd, dropout=0.0):
+        super().__init__()
+        self.key = nn.Linear(n_embd, head_size, bias=False)
+        self.query = nn.Linear(n_embd, head_size, bias=False)
+        self.value = nn.Linear(n_embd, head_size, bias=False)
+        self.dropout = nn.Dropout(dropout)
+    
+    def forward(self, x, return_hook=False):
+        B, T, C = x.shape
+        k = self.key(x)
+        q = self.query(x)
+        
+        attn = (q @ k.transpose(-2, -1)) * (q.size(-1) ** -0.5)
+        attn = F.softmax(attn, dim=-1)
+        hook = attn
+        attn = self.dropout(attn)
+        
+        v = self.value(x)
+        out = attn @ v
+        
+        if return_hook:
+            return out, hook
+        return out
+
+
+class VisionLogisticHead(nn.Module):
+    """Logistic (sigmoid) attention head without causal masking"""
+    
+    def __init__(self, head_size, n_embd, dropout=0.0):
+        super().__init__()
+        self.key = nn.Linear(n_embd, head_size, bias=False)
+        self.query = nn.Linear(n_embd, head_size, bias=False)
+        self.value = nn.Linear(n_embd, head_size, bias=False)
+        self.dropout = nn.Dropout(dropout)
+    
+    def forward(self, x, return_hook=False):
+        B, T, C = x.shape
+        k = self.key(x)
+        q = self.query(x)
+        
+        wei = (q @ k.transpose(-2, -1)) * (q.size(-1) ** -0.5)
+        wei = F.sigmoid(wei)
+        hook = wei
+        wei = self.dropout(wei)
+        
+        v = self.value(x)
+        out = wei @ v
+        
+        if return_hook:
+            return out, hook
+        return out
+
+
+class VisionSoftmaxFreeHead(nn.Module):
+    """Softmax-free attention head without causal masking (SimA for vision)"""
+    
+    def __init__(self, head_size, n_embd, dropout=0.0):
+        super().__init__()
+        self.key = nn.Linear(n_embd, head_size, bias=False)
+        self.query = nn.Linear(n_embd, head_size, bias=False)
+        self.value = nn.Linear(n_embd, head_size, bias=False)
+        self.dropout = nn.Dropout(dropout)
+    
+    def forward(self, x, return_hook=False):
+        B, T, C = x.shape
+        k = self.key(x)
+        q = self.query(x)
+        
+        k = F.normalize(k)
+        q = F.normalize(q)
+        
+        wei = (q @ k.transpose(-2, -1)) * (q.size(-1) ** -0.5)
+        hook = wei
+        wei = self.dropout(wei)
+        
+        v = self.value(x)
+        out = wei @ v
+        
+        if return_hook:
+            return out, hook
+        return out
+
+
+# ============================================
+# LANGUAGE MODEL ATTENTION HEADS (WITH CAUSAL MASKING)
+# ============================================
+
+class Head(nn.Module):
+    """Standard self-attention head with softmax"""
+
+    def __init__(self, head_size, block_size, n_embd, dropout=0.0):
+        super().__init__()
+        self.key = nn.Linear(n_embd, head_size, bias=False)
+        self.query = nn.Linear(n_embd, head_size, bias=False)
+        self.value = nn.Linear(n_embd, head_size, bias=False)
+        self.register_buffer('tril', torch.tril(torch.ones(block_size, block_size)))
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x, return_hook=False):
+        B, T, C = x.shape
+        k = self.key(x)
+        q = self.query(x)
+        
+        wei = q @ k.transpose(-2, -1) * C**-0.5
+        wei = wei.masked_fill(self.tril[:T, :T] == 0, float('-inf'))
+        wei = F.softmax(wei, dim=-1)
+        hook = wei
+        wei = self.dropout(wei)
+        
+        v = self.value(x)
+        out = wei @ v
+        
+        if return_hook:
+            return out, hook
+        return out
+
+
+class SSMaxHead(nn.Module):
+    """Self-attention head with SSMax normalization"""
+
+    def __init__(self, head_size, block_size, n_embd, dropout=0.0):
+        super().__init__()
+        self.key = nn.Linear(n_embd, head_size, bias=False)
+        self.query = nn.Linear(n_embd, head_size, bias=False)
+        self.value = nn.Linear(n_embd, head_size, bias=False)
+        self.register_buffer('tril', torch.tril(torch.ones(block_size, block_size)))
+        
+        vector = torch.ones(size=(block_size,))
+        n_col_vector = (torch.tril(torch.ones(block_size, block_size)) @ vector.T).T
+        mask_ssmax = torch.stack([n_col_vector for _ in range(block_size)])
+        self.register_buffer('tril_ssm', 0.1 * torch.log(mask_ssmax))
+        
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x, return_hook=False):
+        B, T, C = x.shape
+        k = self.key(x)
+        q = self.query(x)
+        
+        wei = q @ k.transpose(-2, -1) * C**-0.5
+        wei = wei.masked_fill(self.tril[:T, :T] == 0, float('-inf'))
+        wei = wei + self.tril_ssm[:T, :T]
+        wei = F.softmax(wei, dim=-1)
+        hook = wei
+        wei = self.dropout(wei)
+        
+        v = self.value(x)
+        out = wei @ v
+        
+        if return_hook:
+            return out, hook
+        return out
+
+
+class LogisticHead(nn.Module):
+    """Self-attention head with sigmoid activation"""
+
+    def __init__(self, head_size, block_size, n_embd, dropout=0.0):
+        super().__init__()
+        self.key = nn.Linear(n_embd, head_size, bias=False)
+        self.query = nn.Linear(n_embd, head_size, bias=False)
+        self.value = nn.Linear(n_embd, head_size, bias=False)
+        self.register_buffer('tril', torch.tril(torch.ones(block_size, block_size)))
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x, return_hook=False):
+        B, T, C = x.shape
+        k = self.key(x)
+        q = self.query(x)
+        
+        wei = q @ k.transpose(-2, -1) * C**-0.5
+        wei = wei.masked_fill(self.tril[:T, :T] == 0, float('-inf'))
+        wei = F.sigmoid(wei)
+        hook = wei
+        wei = self.dropout(wei)
+        
+        v = self.value(x)
+        out = wei @ v
+        
+        if return_hook:
+            return out, hook
+        return out
+
+
+class SoftmaxFreeHead(nn.Module):
+    """Softmax-free self-attention head (SimA)"""
+
+    def __init__(self, head_size, block_size, n_embd, dropout=0.0):
+        super().__init__()
+        self.key = nn.Linear(n_embd, head_size, bias=False)
+        self.query = nn.Linear(n_embd, head_size, bias=False)
+        self.value = nn.Linear(n_embd, head_size, bias=False)
+        self.register_buffer('tril', torch.tril(torch.ones(block_size, block_size)))
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x, return_hook=False):
+        B, T, C = x.shape
+        k = self.key(x)
+        q = self.query(x)
+        
+        k = F.normalize(k)
+        q = F.normalize(q)
+        
+        wei = q @ k.transpose(-2, -1) * C**-0.5
+        wei = wei.masked_fill(self.tril[:T, :T] == 0, 0)
+        hook = wei
+        wei = self.dropout(wei)
+        
+        v = self.value(x)
+        out = wei @ v
+        
+        if return_hook:
+            return out, hook
+        return out
+
+
+class VisionMultiHeadAttention(nn.Module):
+    """Multi-head attention for vision (no causal masking)"""
+    
+    def __init__(self, num_heads, head_size, n_embd, dropout=0.0, head_type='standard'):
+        super().__init__()
+        
+        head_classes = {
+            'standard': VisionHead,
+            'logistic': VisionLogisticHead,
+            'softmax_free': VisionSoftmaxFreeHead
+        }
+        
+        head_class = head_classes.get(head_type, VisionHead)
+        self.heads = nn.ModuleList([
+            head_class(head_size, n_embd, dropout)
+            for _ in range(num_heads)
+        ])
+        self.proj = nn.Linear(n_embd, n_embd)
+        self.dropout = nn.Dropout(dropout)
+    
+    def forward(self, x, return_hook=False):
+        if return_hook:
+            outs, hooks = [], []
+            for h in self.heads:
+                o, hook = h(x, return_hook=True)
+                outs.append(o)
+                hooks.append(hook)
+            
+            out = torch.cat(outs, dim=-1)
+            out = self.dropout(self.proj(out))
+            hooks = torch.stack(hooks, dim=1)  # (B, num_heads, T, T)
+            return out, hooks
+        else:
+            out = torch.cat([h(x) for h in self.heads], dim=-1)
+            out = self.dropout(self.proj(out))
+            return out
+
+
+class VisionBlock(nn.Module):
+    """Transformer block for vision (no causal masking)"""
+    
+    def __init__(self, n_embd, n_head, dropout=0.0, head_type='standard'):
+        super().__init__()
+        head_size = n_embd // n_head
+        self.sa = VisionMultiHeadAttention(n_head, head_size, n_embd, dropout, head_type)
+        self.ffwd = FeedForward(n_embd, dropout)
+        self.ln1 = nn.LayerNorm(n_embd)
+        self.ln2 = nn.LayerNorm(n_embd)
+    
+    def forward(self, x, return_hook=False):
+        if return_hook:
+            sa_out, attn = self.sa(self.ln1(x), return_hook=True)
+            x = x + sa_out
+            x = x + self.ffwd(self.ln2(x))
+            return x, attn
+        else:
+            x = x + self.sa(self.ln1(x))
+            x = x + self.ffwd(self.ln2(x))
+            return x
+
+
+class SmallVisionTransformer(nn.Module):
+    """Vision Transformer for image classification"""
+    
+    def __init__(self, img_size=32, patch_size=4, in_channels=3, num_classes=10,
+                 n_embd=64, n_head=8, n_layer=3, dropout=0.2, head_type='standard'):
+        super().__init__()
+        
+        self.patch_embed = PatchEmbedding(img_size, patch_size, in_channels, n_embd)
+        num_patches = (img_size // patch_size) ** 2
+        
+        # Position embedding includes cls token
+        self.position_embedding = nn.Parameter(
+            torch.zeros(1, num_patches + 1, n_embd)
+        )
+        
+        self.cls_token = nn.Parameter(torch.zeros(1, 1, n_embd))
+        
+        self.blocks = nn.ModuleList([
+            VisionBlock(n_embd, n_head, dropout, head_type)
+            for _ in range(n_layer)
+        ])
+        
+        self.ln_f = nn.LayerNorm(n_embd)
+        self.cls_head = nn.Linear(n_embd, num_classes)
+    
+    def forward(self, x, targets=None, return_hook=False):
+        B = x.size(0)
+        
+        # Patch embedding
+        x = self.patch_embed(x)  # (B, num_patches, n_embd)
+        
+        # Add cls token
+        cls_tokens = self.cls_token.expand(B, -1, -1)
+        x = torch.cat((cls_tokens, x), dim=1)  # (B, num_patches+1, n_embd)
+        
+        # Add position embedding
+        x = x + self.position_embedding
+        
+        # Transformer blocks
+        attentions = []
+        for blk in self.blocks:
+            if return_hook:
+                x, attn = blk(x, return_hook=True)
+                attentions.append(attn)
+            else:
+                x = blk(x)
+        
+        # Final layer norm
+        x = self.ln_f(x)
+        
+        # Classification head (use cls token)
+        cls_output = x[:, 0]
+        logits = self.cls_head(cls_output)
+        
+        # Compute loss if targets provided
+        loss = None
+        if targets is not None:
+            loss = F.cross_entropy(logits, targets)
+        
+        if return_hook:
+            return logits, loss, attentions
+        
+        return logits, loss
