@@ -141,7 +141,6 @@ wget https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakesp
 
 ## References
 
-### Papers
 1. Nakanishi, K. M. (2025). **Scalable-softmax is superior for attention**. arXiv preprint arXiv:2501.19399.
 
 2. Koohpayegani, S. A., & Pirsiavash, H. (2024). **Sima: Simple softmax-free attention for vision transformers**. In Proceedings of the IEEE/CVF Winter Conference on Applications of Computer Vision (pp. 2607-2617).
