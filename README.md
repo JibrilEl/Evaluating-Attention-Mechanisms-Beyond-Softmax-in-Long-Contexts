@@ -101,6 +101,54 @@ python visualize.py curves \
     --output training_curves.png
 ```
 
+### 4. Text8 language model (Tasks 1 & 2: Softmax vs SSMax)
+
+Train char-level language models on **text8** for learning curves (task1) or length generalization (task2). The script downloads text8 automatically if missing.
+
+```bash
+# Task 1: learning curves (fixed context 256, position embedding)
+python train_text8.py task1 --head_type ssmax --max_iters 10000 --save_path ckpt_task1_ssmax.pt
+
+# Task 2: length generalization (train at 256, eval at 256/512/1024, sinusoidal positions)
+python train_text8.py task2 --head_type ssmax --max_iters 3000 --save_path ckpt_task2_ssmax.pt
+```
+
+Use `--head_type standard` for Softmax or `--head_type ssmax` for SSMax. Optional: `--data_dir` to set the directory for text8, `--save_path` to save the checkpoint and training log.
+
+To **replot Task 1 learning curves** from saved checkpoints (like in the notebook):
+
+```bash
+# Single run: train + val loss
+python visualize.py text8_curves --checkpoint ckpt_task1_ssmax.pt --output task1_curves.png
+
+# Comparison: Softmax vs SSMax (validation loss only)
+python visualize.py text8_curves --checkpoint ckpt_task1_softmax.pt --checkpoint_b ckpt_task1_ssmax.pt --output task1_comparison.png
+```
+
+To **replot Task 2 length generalization** (validation loss vs step for 256/512/1024 + final length gen, like the last two plots of the Task 2 notebook):
+
+```bash
+# Single run: two figures (curves over training + final length gen)
+python visualize.py text8_task2_curves --checkpoint ckpt_task2_ssmax.pt --output task2_curves.png
+
+# Softmax vs SSMax: same two figures with both runs
+python visualize.py text8_task2_curves --checkpoint ckpt_task2_softmax.pt --checkpoint_b ckpt_task2_ssmax.pt --output task2_curves.png --output_final task2_final_gen.png
+```
+
+### 5. Task 3: Needle-in-a-Haystack retrieval
+
+Train Softmax (a) and SSMax (b) on synthetic retrieval data, then evaluate on a grid (context length × needle depth). **Output:** side-by-side heatmap (Softmax | SSMax) only.
+
+```bash
+# Run both experiments and plot heatmap (saves task3_results_a.json, task3_results_b.json)
+python run_task3_retrieval.py --output task3_heatmap.png
+
+# Plot heatmap from existing results only (no training)
+python run_task3_retrieval.py --skip_train --output task3_heatmap.png
+```
+
+Options: `--results_dir` for JSON output directory, `--max_iters`, `--eval_lengths`, `--eval_depths`, etc.
+
 ## Training Arguments language model
 
 | Argument | Description | Default |
