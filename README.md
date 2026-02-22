@@ -115,6 +115,26 @@ python train_text8.py task2 --head_type ssmax --max_iters 3000 --save_path ckpt_
 
 Use `--head_type standard` for Softmax or `--head_type ssmax` for SSMax. Optional: `--data_dir` to set the directory for text8, `--save_path` to save the checkpoint and training log.
 
+To **replot Task 1 learning curves** from saved checkpoints (like in the notebook):
+
+```bash
+# Single run: train + val loss
+python visualize.py text8_curves --checkpoint ckpt_task1_ssmax.pt --output task1_curves.png
+
+# Comparison: Softmax vs SSMax (validation loss only)
+python visualize.py text8_curves --checkpoint ckpt_task1_softmax.pt --checkpoint_b ckpt_task1_ssmax.pt --output task1_comparison.png
+```
+
+To **replot Task 2 length generalization** (validation loss vs step for 256/512/1024 + final length gen, like the last two plots of the Task 2 notebook):
+
+```bash
+# Single run: two figures (curves over training + final length gen)
+python visualize.py text8_task2_curves --checkpoint ckpt_task2_ssmax.pt --output task2_curves.png
+
+# Softmax vs SSMax: same two figures with both runs
+python visualize.py text8_task2_curves --checkpoint ckpt_task2_softmax.pt --checkpoint_b ckpt_task2_ssmax.pt --output task2_curves.png --output_final task2_final_gen.png
+```
+
 ### 5. Task 3: Needle-in-a-Haystack retrieval
 
 Train Softmax (a) and SSMax (b) on synthetic retrieval data, then evaluate on a grid (context length × needle depth). **Output:** side-by-side heatmap (Softmax | SSMax) only.
