@@ -1,3 +1,4 @@
+import math
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
@@ -614,4 +615,165 @@ class SmallVisionTransformer(nn.Module):
         if return_hook:
             return logits, loss, attentions
         
+        return logits, loss
+
+
+# ============================================
+# Char-level LM (text8): Task1 & Task2
+# Reuses FeedForward from above.
+# ============================================
+
+def sinusoidal_pos_emb(T, C, device):
+    """Sinusoidal position embedding for variable-length sequences."""
+    position = torch.arange(T, device=device).unsqueeze(1)
+    div_term = torch.exp(torch.arange(0, C, 2, device=device) * (-math.log(10000.0) / C))
+    pe = torch.zeros(T, C, device=device)
+    pe[:, 0::2] = torch.sin(position * div_term)
+    pe[:, 1::2] = torch.cos(position * div_term)
+    return pe
+
+
+class HeadCharLM(nn.Module):
+    """Vanilla self-attention head (softmax) for char-level LM."""
+
+    def __init__(self, n_embd, head_size, block_size, dropout=0.0):
+        super().__init__()
+        self.key = nn.Linear(n_embd, head_size, bias=False)
+        self.query = nn.Linear(n_embd, head_size, bias=False)
+        self.value = nn.Linear(n_embd, head_size, bias=False)
+        self.register_buffer("tril", torch.tril(torch.ones(block_size, block_size)))
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x):
+        B, T, _ = x.shape
+        k = self.key(x)
+        q = self.query(x)
+        scores = (q @ k.transpose(-2, -1)) * (k.shape[-1] ** -0.5)
+        scores = scores.masked_fill(self.tril[:T, :T] == 0, float("-inf"))
+        w = F.softmax(scores, dim=-1)
+        w = self.dropout(w)
+        v = self.value(x)
+        return w @ v
+
+
+class SSMaxHeadLearnable(nn.Module):
+    """SSMax head with learnable s (q * s*log(n)) for char-level LM."""
+
+    def __init__(self, n_embd, head_size, block_size, dropout=0.0):
+        super().__init__()
+        self.key = nn.Linear(n_embd, head_size, bias=False)
+        self.query = nn.Linear(n_embd, head_size, bias=False)
+        self.value = nn.Linear(n_embd, head_size, bias=False)
+        self.register_buffer("tril", torch.tril(torch.ones(block_size, block_size)))
+        self.dropout = nn.Dropout(dropout)
+        self.s_raw = nn.Parameter(torch.tensor(0.0))
+
+    def s_value(self):
+        return F.softplus(self.s_raw)
+
+    def forward(self, x):
+        B, T, _ = x.shape
+        k = self.key(x)
+        q = self.query(x)
+        v = self.value(x)
+        n = torch.arange(1, T + 1, device=x.device, dtype=x.dtype)
+        logn = torch.log(n).view(1, T, 1)
+        q_scaled = q * (self.s_value() * logn)
+        scores = (q_scaled @ k.transpose(-2, -1)) * (k.shape[-1] ** -0.5)
+        scores = scores.masked_fill(self.tril[:T, :T] == 0, float("-inf"))
+        w = F.softmax(scores, dim=-1)
+        w = self.dropout(w)
+        return w @ v
+
+
+class MultiHeadAttentionChar(nn.Module):
+    """Multi-head attention for char LM (softmax or ssmax learnable)."""
+
+    def __init__(self, n_embd, n_head, block_size, dropout=0.0, attn_mode="softmax"):
+        super().__init__()
+        head_size = n_embd // n_head
+        if attn_mode == "softmax":
+            mk = lambda: HeadCharLM(n_embd, head_size, block_size, dropout)
+        elif attn_mode == "ssmax":
+            mk = lambda: SSMaxHeadLearnable(n_embd, head_size, block_size, dropout)
+        else:
+            raise ValueError(attn_mode)
+        self.heads = nn.ModuleList([mk() for _ in range(n_head)])
+        self.proj = nn.Linear(n_embd, n_embd)
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x):
+        out = torch.cat([h(x) for h in self.heads], dim=-1)
+        return self.dropout(self.proj(out))
+
+
+class BlockChar(nn.Module):
+    """Transformer block for char LM (returns x only). Reuses FeedForward."""
+
+    def __init__(self, n_embd, n_head, block_size, dropout=0.0, attn_mode="softmax"):
+        super().__init__()
+        self.sa = MultiHeadAttentionChar(n_embd, n_head, block_size, dropout, attn_mode)
+        self.ffwd = FeedForward(n_embd, dropout)
+        self.ln1 = nn.LayerNorm(n_embd)
+        self.ln2 = nn.LayerNorm(n_embd)
+
+    def forward(self, x):
+        x = x + self.sa(self.ln1(x))
+        x = x + self.ffwd(self.ln2(x))
+        return x
+
+
+class BigramLMEmbedPos(nn.Module):
+    """LM with learned position embedding (fixed block_size). For text8 task1."""
+
+    def __init__(self, vocab_size, n_embd, n_head, n_layer, block_size, dropout=0.0, attn_mode="softmax"):
+        super().__init__()
+        self.block_size = block_size
+        self.token_embedding_table = nn.Embedding(vocab_size, n_embd)
+        self.position_embedding_table = nn.Embedding(block_size, n_embd)
+        self.blocks = nn.Sequential(*[
+            BlockChar(n_embd, n_head, block_size, dropout, attn_mode) for _ in range(n_layer)
+        ])
+        self.ln_f = nn.LayerNorm(n_embd)
+        self.lm_head = nn.Linear(n_embd, vocab_size)
+
+    def forward(self, idx, targets=None):
+        B, T = idx.shape
+        tok_emb = self.token_embedding_table(idx)
+        pos_emb = self.position_embedding_table(torch.arange(T, device=idx.device))
+        x = tok_emb + pos_emb
+        x = self.blocks(x)
+        x = self.ln_f(x)
+        logits = self.lm_head(x)
+        loss = None
+        if targets is not None:
+            loss = F.cross_entropy(logits.view(B * T, -1), targets.view(B * T))
+        return logits, loss
+
+
+class BigramLMSinusoidal(nn.Module):
+    """LM with sinusoidal position (variable T). For text8 task2."""
+
+    def __init__(self, vocab_size, n_embd, n_head, n_layer, block_size, dropout=0.0, attn_mode="softmax"):
+        super().__init__()
+        self.block_size = block_size
+        self.n_embd = n_embd
+        self.token_embedding_table = nn.Embedding(vocab_size, n_embd)
+        self.blocks = nn.Sequential(*[
+            BlockChar(n_embd, n_head, block_size, dropout, attn_mode) for _ in range(n_layer)
+        ])
+        self.ln_f = nn.LayerNorm(n_embd)
+        self.lm_head = nn.Linear(n_embd, vocab_size)
+
+    def forward(self, idx, targets=None):
+        B, T = idx.shape
+        tok_emb = self.token_embedding_table(idx)
+        pos_emb = sinusoidal_pos_emb(T, self.n_embd, idx.device)
+        x = tok_emb + pos_emb
+        x = self.blocks(x)
+        x = self.ln_f(x)
+        logits = self.lm_head(x)
+        loss = None
+        if targets is not None:
+            loss = F.cross_entropy(logits.view(B * T, -1), targets.view(B * T))
         return logits, loss

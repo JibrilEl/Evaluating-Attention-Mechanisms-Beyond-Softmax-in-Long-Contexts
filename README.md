@@ -14,23 +14,25 @@ This repository contains all the implementations for the poster that was present
 
 ### 1. Training a Model
 
-Train a model with the default softmax-free (SimA) attention:
+`train.py` has two commands: **lm** (custom text with GPT-2 tokenizer) and **text8** (char-level on text8, task1 or task2).
+
+**LM (e.g. Tiny Shakespeare):** train with the default softmax-free (SimA) attention:
 
 ```bash
-python train.py --data_path input.txt --save_path model.pt
+python train.py lm --data_path input.txt --save_path model.pt
 ```
 
 Train with different attention mechanisms:
 
 ```bash
 # Standard softmax attention
-python train.py --data_path input.txt --head_type standard --save_path model_softmax.pt
+python train.py lm --data_path input.txt --head_type standard --save_path model_softmax.pt
 
 # SSMax attention
-python train.py --data_path input.txt --head_type ssmax --save_path model_ssmax.pt
+python train.py lm --data_path input.txt --head_type ssmax --save_path model_ssmax.pt
 
 # Logistic (sigmoid) attention
-python train.py --data_path input.txt --head_type logistic --save_path model_logistic.pt
+python train.py lm --data_path input.txt --head_type logistic --save_path model_logistic.pt
 ```
 
 
@@ -107,13 +109,13 @@ Train char-level language models on **text8** for learning curves (task1) or len
 
 ```bash
 # Task 1: learning curves (fixed context 256, position embedding)
-python train_text8.py task1 --head_type ssmax --max_iters 10000 --save_path ckpt_task1_ssmax.pt
+python train.py text8 task1 --head_type ssmax --max_iters 10000 --save_path ckpt_task1_ssmax.pt
 
 # Task 2: length generalization (train at 256, eval at 256/512/1024, sinusoidal positions)
-python train_text8.py task2 --head_type ssmax --max_iters 3000 --save_path ckpt_task2_ssmax.pt
+python train.py text8 task2 --head_type ssmax --max_iters 3000 --save_path ckpt_task2_ssmax.pt
 ```
 
-Use `--head_type standard` for Softmax or `--head_type ssmax` for SSMax. Optional: `--data_dir` to set the directory for text8, `--save_path` to save the checkpoint and training log.
+Use `--head_type standard` for Softmax or `--head_type ssmax` for SSMax. Optional: `--data_dir` to set the directory for text8, `--save_path` to save the checkpoint and training log. Checkpoints produced by `train.py text8 task1` / `task2` are compatible with the visualization commands below.
 
 To **replot Task 1 learning curves** from saved checkpoints (like in the notebook):
 
