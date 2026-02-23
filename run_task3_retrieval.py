@@ -385,12 +385,10 @@ def main():
     parser.add_argument("--eval_lengths", type=int, nargs="+", default=[128, 256, 512, 1024])
     parser.add_argument("--eval_depths", type=float, nargs="+", default=[0.0, 0.25, 0.5, 0.75, 1.0])
     parser.add_argument("--n_eval_samples", type=int, default=500)
-    parser.add_argument("--results_dir", type=str, default=None, help="Where to save task3_results_*.json (default: cwd)")
-    parser.add_argument("--output", type=str, default=None, help="Path to save heatmap PNG")
+    parser.add_argument("--results_dir", type=str, default="experiment_results", help="Where to save task3_results_*.json")
+    parser.add_argument("--output", type=str, default="plots/task3_heatmap.png", help="Path to save heatmap PNG")
     parser.add_argument("--skip_train", action="store_true", help="Only plot heatmap from existing task3_results_*.json")
     args = parser.parse_args()
-    if args.results_dir is None:
-        args.results_dir = os.getcwd()
 
     device = get_device()
     print(f"Using device: {device}")
@@ -408,10 +406,13 @@ def main():
             results_a = json.load(f)
         with open(path_b) as f:
             results_b = json.load(f)
+        if args.output:
+            os.makedirs(os.path.dirname(args.output), exist_ok=True)
         plot_heatmaps(results_a, results_b, args.output)
         return
 
     # Train a (softmax) then b (ssmax)
+    os.makedirs(args.results_dir, exist_ok=True)
     print("Training experiment a (Softmax)...")
     results_a = train_one_experiment("a", args, device)
     path_a = os.path.join(args.results_dir, "task3_results_a.json")
@@ -426,6 +427,8 @@ def main():
         json.dump(results_b, f, indent=2)
     print(f"Results saved to {path_b}")
 
+    if args.output:
+        os.makedirs(os.path.dirname(args.output), exist_ok=True)
     plot_heatmaps(results_a, results_b, args.output)
 
 

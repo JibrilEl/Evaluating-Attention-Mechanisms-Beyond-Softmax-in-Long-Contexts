@@ -1,3 +1,4 @@
+import os
 import torch
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -6,6 +7,11 @@ from transformers import AutoTokenizer
 from torchvision import datasets, transforms
 import numpy as np
 from model import SmallLanguageModel, SmallVisionTransformer
+
+
+def _ensure_output_dir(path):
+    if path and os.path.dirname(path):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
 
 
 def plot_cifar10_attention(model, data_loader, device, layer=0, head=0, 
@@ -53,6 +59,7 @@ def plot_cifar10_attention(model, data_loader, device, layer=0, head=0,
             plt.colorbar(im, ax=axes[1, i], fraction=0.046)
         
         plt.tight_layout()
+        _ensure_output_dir(output_path)
         plt.savefig(output_path, dpi=150, bbox_inches='tight')
         print(f"CIFAR-10 attention visualization saved to {output_path}")
         plt.close()
@@ -95,6 +102,7 @@ def plot_cifar10_training_curves(checkpoint_path, output_path='cifar10_training.
         ax2.grid(True, alpha=0.3)
     
     plt.tight_layout()
+    _ensure_output_dir(output_path)
     plt.savefig(output_path, dpi=150, bbox_inches='tight')
     print(f"CIFAR-10 training curves saved to {output_path}")
     plt.close()
@@ -130,6 +138,7 @@ def plot_attention_heatmap(model, data, tokenizer, device, layer=0, head=0, outp
             plt.yticks(range(len(replaced)), replaced, fontsize=8)
         
         plt.tight_layout()
+        _ensure_output_dir(output_path)
         plt.savefig(output_path, dpi=150, bbox_inches='tight')
         print(f"Attention heatmap saved to {output_path}")
         plt.close()
@@ -157,6 +166,7 @@ def plot_benchmark_results(results_path='benchmark_results.json', output_path='b
     plt.legend()
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
+    _ensure_output_dir(output_path)
     plt.savefig(output_path, dpi=150, bbox_inches='tight')
     print(f"Benchmark plot saved to {output_path}")
     plt.close()
@@ -183,6 +193,7 @@ def plot_training_curves(checkpoint_path, output_path='training_curves.png'):
     plt.legend()
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
+    _ensure_output_dir(output_path)
     plt.savefig(output_path, dpi=150, bbox_inches='tight')
     print(f"Training curves saved to {output_path}")
     plt.close()
@@ -237,6 +248,7 @@ def plot_text8_task1_curves(checkpoint_path, output_path='text8_task1_curves.png
         plt.grid(True, alpha=0.3)
 
     plt.tight_layout()
+    _ensure_output_dir(output_path)
     plt.savefig(output_path, dpi=150, bbox_inches='tight')
     print(f"Text8 Task1 curves saved to {output_path}")
     plt.close()
@@ -293,6 +305,7 @@ def plot_text8_task2_curves(
         plt.legend()
         plt.grid(True, alpha=0.3)
         plt.tight_layout()
+        _ensure_output_dir(output_path)
         plt.savefig(output_path, dpi=150, bbox_inches='tight')
         print(f"Text8 Task2 curves saved to {output_path}")
         plt.close()
@@ -308,6 +321,7 @@ def plot_text8_task2_curves(
         plt.legend()
         plt.grid(True, alpha=0.3)
         plt.tight_layout()
+        _ensure_output_dir(output_final)
         plt.savefig(output_final, dpi=150, bbox_inches='tight')
         print(f"Text8 Task2 final length gen saved to {output_final}")
         plt.close()
@@ -332,6 +346,7 @@ def plot_text8_task2_curves(
     plt.legend()
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
+    _ensure_output_dir(output_path)
     plt.savefig(output_path, dpi=150, bbox_inches='tight')
     print(f"Text8 Task2 curves saved to {output_path}")
     plt.close()
@@ -350,6 +365,7 @@ def plot_text8_task2_curves(
     plt.legend()
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
+    _ensure_output_dir(output_final)
     plt.savefig(output_final, dpi=150, bbox_inches='tight')
     print(f"Text8 Task2 final length gen saved to {output_final}")
     plt.close()
@@ -370,7 +386,7 @@ def main():
                                 help='Layer index to visualize')
     heatmap_parser.add_argument('--head', type=int, default=0,
                                 help='Head index to visualize')
-    heatmap_parser.add_argument('--output', type=str, default='attention_heatmap.png',
+    heatmap_parser.add_argument('--output', type=str, default='plots/attention_heatmap.png',
                                 help='Output path for heatmap')
     
     # CIFAR-10 attention visualization
@@ -386,7 +402,7 @@ def main():
                                     help='Head index to visualize')
     cifar_attn_parser.add_argument('--num_samples', type=int, default=4,
                                     help='Number of samples to visualize')
-    cifar_attn_parser.add_argument('--output', type=str, default='cifar10_attention.png',
+    cifar_attn_parser.add_argument('--output', type=str, default='plots/cifar10_attention.png',
                                     help='Output path for visualization')
     
     # CIFAR-10 training curves
@@ -394,21 +410,21 @@ def main():
                                                  help='Plot CIFAR-10 training curves')
     cifar_curves_parser.add_argument('--checkpoint', type=str, required=True,
                                      help='Path to model checkpoint')
-    cifar_curves_parser.add_argument('--output', type=str, default='cifar10_training.png',
+    cifar_curves_parser.add_argument('--output', type=str, default='plots/cifar10_training.png',
                                      help='Output path for training curves')
     
     # Benchmark plot command
     benchmark_parser = subparsers.add_parser('benchmark', help='Plot benchmark results')
-    benchmark_parser.add_argument('--results', type=str, default='benchmark_results.json',
+    benchmark_parser.add_argument('--results', type=str, default='experiment_results/benchmark_results.json',
                                   help='Path to benchmark results JSON')
-    benchmark_parser.add_argument('--output', type=str, default='benchmark_plot.png',
+    benchmark_parser.add_argument('--output', type=str, default='plots/benchmark_plot.png',
                                   help='Output path for benchmark plot')
     
     # Training curves command (for language models)
     curves_parser = subparsers.add_parser('curves', help='Plot language model training curves')
     curves_parser.add_argument('--checkpoint', type=str, required=True,
                                help='Path to model checkpoint')
-    curves_parser.add_argument('--output', type=str, default='training_curves.png',
+    curves_parser.add_argument('--output', type=str, default='plots/training_curves.png',
                                help='Output path for training curves')
     
     # Text8 Task1 curves (from train_text8.py task1 --save_path)
@@ -417,7 +433,7 @@ def main():
                               help='Path to train_text8.py task1 checkpoint (.pt)')
     text8_parser.add_argument('--checkpoint_b', type=str, default=None,
                               help='Optional second checkpoint for Softmax vs SSMax comparison (validation loss only)')
-    text8_parser.add_argument('--output', type=str, default='text8_task1_curves.png',
+    text8_parser.add_argument('--output', type=str, default='plots/text8_task1_curves.png',
                               help='Output path for plot')
     
     # Text8 Task2 curves (from train_text8.py task2 --save_path): curves over training + final length gen
@@ -426,7 +442,7 @@ def main():
                                     help='Path to train_text8.py task2 checkpoint (.pt)')
     text8_task2_parser.add_argument('--checkpoint_b', type=str, default=None,
                                     help='Optional second checkpoint for Softmax vs SSMax comparison')
-    text8_task2_parser.add_argument('--output', type=str, default='text8_task2_curves.png',
+    text8_task2_parser.add_argument('--output', type=str, default='plots/text8_task2_curves.png',
                                     help='Output path for curves-over-training plot')
     text8_task2_parser.add_argument('--output_final', type=str, default=None,
                                     help='Output path for final length generalization plot (default: <output>_final_gen.png)')

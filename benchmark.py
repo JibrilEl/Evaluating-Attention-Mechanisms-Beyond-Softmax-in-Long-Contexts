@@ -1,3 +1,4 @@
+import os
 import torch
 import numpy as np
 import argparse
@@ -133,7 +134,7 @@ def main():
                         help='Number of benchmark runs per configuration')
     parser.add_argument('--warmup_runs', type=int, default=20,
                         help='Number of warmup runs before benchmarking')
-    parser.add_argument('--output', type=str, default='benchmark_results.json',
+    parser.add_argument('--output', type=str, default='experiment_results/benchmark_results.json',
                         help='Output file for benchmark results')
     
     args = parser.parse_args()
@@ -153,6 +154,9 @@ def main():
     )
     
     # Save results
+    out_dir = os.path.dirname(args.output)
+    if out_dir:
+        os.makedirs(out_dir, exist_ok=True)
     with open(args.output, 'w') as f:
         json.dump(results, f, indent=2)
     

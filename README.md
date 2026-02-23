@@ -10,6 +10,14 @@ This repository contains all the implementations for the poster that was present
 - **SimA** (`SoftmaxFreeHead`): Softmax-free attention with normalized queries and keys (see [2])
 
 
+## Repository structure
+
+Outputs are organized in three directories (created automatically when needed):
+
+- **model_checkpoints/** — saved models (e.g. from `train.py lm`, `train.py text8`, `train_cifar10.py`)
+- **plots/** — figures (heatmaps, training curves, benchmark plots, text8 curves)
+- **experiment_results/** — JSON results (benchmark, Task 3 needle-in-a-haystack)
+
 ## Usage
 
 ### 1. Training a Model
@@ -19,29 +27,29 @@ This repository contains all the implementations for the poster that was present
 **LM (e.g. Tiny Shakespeare):** train with the default softmax-free (SimA) attention:
 
 ```bash
-python train.py lm --data_path input.txt --save_path model.pt
+python train.py lm --data_path input.txt --save_path model_checkpoints/model.pt
 ```
 
 Train with different attention mechanisms:
 
 ```bash
 # Standard softmax attention
-python train.py lm --data_path input.txt --head_type standard --save_path model_softmax.pt
+python train.py lm --data_path input.txt --head_type standard --save_path model_checkpoints/model_softmax.pt
 
 # SSMax attention
-python train.py lm --data_path input.txt --head_type ssmax --save_path model_ssmax.pt
+python train.py lm --data_path input.txt --head_type ssmax --save_path model_checkpoints/model_ssmax.pt
 
 # Logistic (sigmoid) attention
-python train.py lm --data_path input.txt --head_type logistic --save_path model_logistic.pt
+python train.py lm --data_path input.txt --head_type logistic --save_path model_checkpoints/model_logistic.pt
 ```
 
 
 ### 2. Benchmarking Performance
 
-Run benchmarks to compare inference speed of different attention heads:
+Run benchmarks to compare inference speed of different attention heads. Results are saved to `experiment_results/benchmark_results.json` by default.
 
 ```bash
-python benchmark.py --output benchmark_results.json
+python benchmark.py
 ```
 
 Customize benchmark settings:
@@ -51,22 +59,21 @@ python benchmark.py \
     --context_lengths 64 128 256 512 1024 2048 4096 8192 \
     --batch_size 2 \
     --n_runs 50 \
-    --output benchmark_results.json
+    --output experiment_results/benchmark_results.json
 ```
 
 ### 3. Visualization
 
 #### Plot Attention Heatmaps
 
-Visualize attention weights from a trained model:
+Visualize attention weights from a trained model. Output defaults to `plots/attention_heatmap.png`.
 
 ```bash
 python visualize.py heatmap \
-    --checkpoint model.pt \
+    --checkpoint model_checkpoints/model.pt \
     --data_path input.txt \
     --layer 0 \
-    --head 0 \
-    --output attention_heatmap.png
+    --head 0
 ```
 
 
@@ -76,21 +83,18 @@ Visualize attention patterns on CIFAR-10 images:
 
 ```bash
 python visualize.py cifar10_attention \
-    --checkpoint cifar10_model.pt \
+    --checkpoint model_checkpoints/cifar10_model.pt \
     --layer 0 \
     --head 0 \
-    --num_samples 4 \
-    --output cifar10_attention.png
+    --num_samples 4
 ```
 
 #### Plot Benchmark Results
 
-Generate a plot from benchmark results:
+Generate a plot from benchmark results (reads `experiment_results/benchmark_results.json` by default, writes to `plots/benchmark_plot.png`):
 
 ```bash
-python visualize.py benchmark \
-    --results benchmark_results.json \
-    --output benchmark_plot.png
+python visualize.py benchmark
 ```
 
 #### Plot Training Curves
@@ -99,8 +103,7 @@ Visualize training and validation loss:
 
 ```bash
 python visualize.py curves \
-    --checkpoint model.pt \
-    --output training_curves.png
+    --checkpoint model_checkpoints/model.pt
 ```
 
 ### 4. Text8 language model (Tasks 1 & 2: Softmax vs SSMax)
@@ -109,47 +112,47 @@ Train char-level language models on **text8** for learning curves (task1) or len
 
 ```bash
 # Task 1: learning curves (fixed context 256, position embedding)
-python train.py text8 task1 --head_type ssmax --max_iters 10000 --save_path ckpt_task1_ssmax.pt
+python train.py text8 task1 --head_type ssmax --max_iters 10000 --save_path model_checkpoints/ckpt_task1_ssmax.pt
 
 # Task 2: length generalization (train at 256, eval at 256/512/1024, sinusoidal positions)
-python train.py text8 task2 --head_type ssmax --max_iters 3000 --save_path ckpt_task2_ssmax.pt
+python train.py text8 task2 --head_type ssmax --max_iters 3000 --save_path model_checkpoints/ckpt_task2_ssmax.pt
 ```
 
 Use `--head_type standard` for Softmax or `--head_type ssmax` for SSMax. Optional: `--data_dir` to set the directory for text8, `--save_path` to save the checkpoint and training log. Checkpoints produced by `train.py text8 task1` / `task2` are compatible with the visualization commands below.
 
-To **replot Task 1 learning curves** from saved checkpoints (like in the notebook):
+To **replot Task 1 learning curves** from saved checkpoints (like in the notebook). Outputs go to `plots/` by default:
 
 ```bash
 # Single run: train + val loss
-python visualize.py text8_curves --checkpoint ckpt_task1_ssmax.pt --output task1_curves.png
+python visualize.py text8_curves --checkpoint model_checkpoints/ckpt_task1_ssmax.pt
 
 # Comparison: Softmax vs SSMax (validation loss only)
-python visualize.py text8_curves --checkpoint ckpt_task1_softmax.pt --checkpoint_b ckpt_task1_ssmax.pt --output task1_comparison.png
+python visualize.py text8_curves --checkpoint model_checkpoints/ckpt_task1_softmax.pt --checkpoint_b model_checkpoints/ckpt_task1_ssmax.pt --output plots/task1_comparison.png
 ```
 
 To **replot Task 2 length generalization** (validation loss vs step for 256/512/1024 + final length gen, like the last two plots of the Task 2 notebook):
 
 ```bash
 # Single run: two figures (curves over training + final length gen)
-python visualize.py text8_task2_curves --checkpoint ckpt_task2_ssmax.pt --output task2_curves.png
+python visualize.py text8_task2_curves --checkpoint model_checkpoints/ckpt_task2_ssmax.pt
 
 # Softmax vs SSMax: same two figures with both runs
-python visualize.py text8_task2_curves --checkpoint ckpt_task2_softmax.pt --checkpoint_b ckpt_task2_ssmax.pt --output task2_curves.png --output_final task2_final_gen.png
+python visualize.py text8_task2_curves --checkpoint model_checkpoints/ckpt_task2_softmax.pt --checkpoint_b model_checkpoints/ckpt_task2_ssmax.pt --output plots/task2_curves.png --output_final plots/task2_final_gen.png
 ```
 
 ### 5. Task 3: Needle-in-a-Haystack retrieval
 
-Train Softmax (a) and SSMax (b) on synthetic retrieval data, then evaluate on a grid (context length × needle depth). **Output:** side-by-side heatmap (Softmax | SSMax) only.
+Train Softmax (a) and SSMax (b) on synthetic retrieval data, then evaluate on a grid (context length × needle depth). **Output:** side-by-side heatmap (Softmax | SSMax) only. JSON results are saved to `experiment_results/` and the heatmap to `plots/task3_heatmap.png` by default.
 
 ```bash
-# Run both experiments and plot heatmap (saves task3_results_a.json, task3_results_b.json)
-python run_task3_retrieval.py --output task3_heatmap.png
+# Run both experiments and plot heatmap (saves experiment_results/task3_results_a.json, task3_results_b.json)
+python run_task3_retrieval.py
 
 # Plot heatmap from existing results only (no training)
-python run_task3_retrieval.py --skip_train --output task3_heatmap.png
+python run_task3_retrieval.py --skip_train
 ```
 
-Options: `--results_dir` for JSON output directory, `--max_iters`, `--eval_lengths`, `--eval_depths`, etc.
+Options: `--results_dir` (default: `experiment_results`), `--output` (default: `plots/task3_heatmap.png`), `--max_iters`, `--eval_lengths`, `--eval_depths`, etc.
 
 ## Training Arguments language model
 
