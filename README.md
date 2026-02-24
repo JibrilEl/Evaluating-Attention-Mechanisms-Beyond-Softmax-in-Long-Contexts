@@ -1,6 +1,22 @@
 # Evaluating attention mechanisms beyond softmax in long contexts
 
-This repository contains all the implementations for the poster that was presented during the CentraleSupélec deep learning course poster session (see the full poster below !).
+This repository contains all the implementations for the CentraleSupélec deep learning course's project (see the full poster below !).
+
+
+![Vanilla Softmax attention](plots/car_latent_space_vanilla.png?raw=true)
+
+*Vanilla Softmax attention*
+
+![Distillation with sparsity prior](plots/car_latent_space_sima.png?raw=true)
+
+*Improved SimA attention*
+
+
+## Poster
+
+[![Poster preview](assets/poster_preview.png)](assets/poster.pdf)
+
+**[Download the poster (PDF)](assets/poster.pdf)**
 
 ## Implemented Attention Heads
 
@@ -202,12 +218,6 @@ You can download the tiny shakespeare dataset here :
 ```bash
 wget https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt
 ```
-
-## Poster
-
-[![Poster preview](assets/poster_preview.png)](assets/poster.pdf)
-
-**[Download the poster (PDF)](assets/poster.pdf)**
 
 
 ## References
